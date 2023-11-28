@@ -20,9 +20,11 @@ public class NeRFRenderer : MonoBehaviour
     
     // VARIABLES: Paths
     private string outputDirName;
+    private string model;
     private string modelPath;
     private string intrinsicPath;
     private string poseFileName;
+    private string poseMatrixPath;
 
     // VARIABLES: Process
     private bool pollWaiting = false;
@@ -50,8 +52,9 @@ public class NeRFRenderer : MonoBehaviour
         mr.material = nerfMaterial;
 
         outputDirName = Application.persistentDataPath + "/unitnerf";
-        modelPath = Application.dataPath + "/nerf-volrend/models/plenoctree/ficus/ficus.npz";
-        intrinsicPath = Application.dataPath + "/nerf-volrend/models/plenoctree/ficus/intrinsics.txt";
+        model = "ficus";
+        modelPath = Application.dataPath + @$"/nerf-volrend/models/plenoctree/{model}/{model}.npz";
+        intrinsicPath = Application.dataPath + @$"/nerf-volrend/models/plenoctree/{model}/intrinsics.txt";
 
         // FLOW: process variable instantiation
         process = new System.Diagnostics.Process();
@@ -66,6 +69,25 @@ public class NeRFRenderer : MonoBehaviour
 
         benchmarkTime = DateTime.Now;
         csv = new StringBuilder();
+
+        Matrix4x4 camMat = new Matrix4x4();
+        camMat[0, 0] = -1;
+        camMat[0, 1] = 0;
+        camMat[0, 2] = 0;
+        camMat[0, 3] = 0;
+        camMat[1, 0] = 0;
+        camMat[1, 1] = -0.7341f;
+        camMat[1, 2] = 0.67903f;
+        camMat[1, 3] = 2.73f;
+        camMat[2, 0] = 0;
+        camMat[2, 1] = 0.67903f;
+        camMat[2, 2] = 0.734109f;
+        camMat[2, 3] = 2.959f;
+        camMat[3, 0] = 0;
+        camMat[3, 1] = 0;
+        camMat[3, 2] = 0;
+        camMat[3, 3] = 1;
+        // viewCamera.worldToCameraMatrix = camMat;
     }
 
     void Update()
@@ -100,11 +122,28 @@ public class NeRFRenderer : MonoBehaviour
                 // FLOW: Log error
                 Debug.Log("Record fps: " + e.Message);
             }
-            
         }
 
-        // REVIEW: Rotate object towards camera
-        // gameObject.transform.rotation = Quaternion.Slerp(gameObject.transform.rotation, Quaternion.LookRotation(viewCamera.transform.position - gameObject.transform.position), 1/(Time.deltaTime * 1000f));
+        // FLOW: Update viewing image to be in front of the camera
+        // if (viewCamera.WorldToViewportPoint(gameObject.transform.position).x >= 0 
+        // && viewCamera.WorldToViewportPoint(gameObject.transform.position).x <= 1
+        // && viewCamera.WorldToViewportPoint(gameObject.transform.position).y >= 0 
+        // && viewCamera.WorldToViewportPoint(gameObject.transform.position).y <= 1
+        // && viewCamera.WorldToViewportPoint(gameObject.transform.position).z >= 0)
+        // {
+        //     mr.enabled = true;
+        // }
+        // else
+        // {
+        //     mr.enabled = false;
+        // }
+        gameObject.transform.rotation = Quaternion.Slerp(gameObject.transform.rotation, Quaternion.LookRotation(viewCamera.transform.position - gameObject.transform.position), 1/(Time.deltaTime * 1000f));
+        Quad quad = new Quad(/*-Vector3.Normalize(viewCamera.transform.position - new Vector3(0, 0, 5))*/Vector3.Normalize(gameObject.transform.position - viewCamera.transform.position), gameObject.transform.position, viewCamera);
+        Mesh[] sideMesh = new Mesh[1];
+        sideMesh[0] = quad.mesh;
+        mf.mesh = MeshUtils.MergeMeshes(sideMesh);
+
+        // FLOW: Poll system
         if(!pollWaiting) {
             StartPlenoctrees();
         } else {
@@ -126,7 +165,44 @@ public class NeRFRenderer : MonoBehaviour
         processStart = DateTime.Now;
         try
         {
-            Matrix4x4 objMat = viewCamera.cameraToWorldMatrix * gameObject.transform.worldToLocalMatrix;
+            Matrix4x4 rotMat = new Matrix4x4();
+            rotMat[0, 0] = 1;
+            rotMat[0, 1] = 0;
+            rotMat[0, 2] = 0;
+            rotMat[0, 3] = 0;
+            rotMat[1, 0] = 0;
+            rotMat[1, 1] = 0;
+            rotMat[1, 2] = 1;
+            rotMat[1, 3] = 0;
+            rotMat[2, 0] = 0;
+            rotMat[2, 1] = -1;
+            rotMat[2, 2] = 0;
+            rotMat[2, 3] = 0;
+            rotMat[3, 0] = 0;
+            rotMat[3, 1] = 0;
+            rotMat[3, 2] = 0;
+            rotMat[3, 3] = 1;
+            Matrix4x4 objMat = new Matrix4x4();
+            objMat[0, 0] = -1.000000119209289551f;
+            objMat[0, 1] = 0;
+            objMat[0, 2] = 0;
+            objMat[0, 3] = 0;
+            objMat[1, 0] = 0;
+            objMat[1, 1] = -0.7341099977493286133f;
+            objMat[1, 2] = 0.6790307164192199707f;
+            objMat[1, 3] = 1.737260103225708008f;
+            objMat[2, 0] = 0;
+            objMat[2, 1] = 0.6790306568145751953f;
+            objMat[2, 2] = 0.7341099977493286133f;
+            objMat[2, 3] = 1.959291696548461914f;
+            objMat[3, 0] = 0;
+            objMat[3, 1] = 0;
+            objMat[3, 2] = 0;
+            objMat[3, 3] = 1;
+            // objMat[0, 3] = -2.260683f;
+            // objMat[1, 3] = -0.2556345f;
+            // objMat[2, 3] = 6.275355f;
+            // objMat[3, 3] = 1;
             Debug.Log(objMat);
             string poseMatrixText = "";
             for (var i = 0; i < 4; i++)
@@ -138,21 +214,17 @@ public class NeRFRenderer : MonoBehaviour
                 poseMatrixText += "\n";
             }
 
+
             // FLOW: Create pose matrix path
             poseFileName = @$"{viewCamera.transform.position.x}-{viewCamera.transform.position.y}-{viewCamera.transform.position.z}";
-            string poseMatrixPath = @$"{outputDirName}/{poseFileName}.txt";
-            // poseFileName = "r_0";
-            // string poseMatrixPath = Application.dataPath + "/nerf-volrend/models/plenoctree/ficus/pose/" + poseFileName + ".txt";
+            poseMatrixPath = @$"{outputDirName}/{poseFileName}.txt";
+            // string poseFileNameStable = "r_0";
+            // string poseMatrixPathStable = Application.dataPath + "/nerf-volrend/models/plenoctree/ficus/pose/" + poseFileNameStable + ".txt";
 
             // FLOW: Create intrinsics and pose
-            if (File.Exists(poseMatrixPath))
+            if (!File.Exists(poseMatrixPath))
             {
-                // FLOW: Writes to file
-                File.WriteAllText(poseMatrixPath, poseMatrixText);
-            }
-            else
-            {
-                // FLOW: Create the file.
+                // FLOW: Create the file and write pose matrix to it
                 using (FileStream fs = File.Create(poseMatrixPath))
                 {
                     byte[] info = new UTF8Encoding(true).GetBytes(poseMatrixText);
@@ -187,26 +259,11 @@ public class NeRFRenderer : MonoBehaviour
             {
                 if(File.Exists(texFileName)) 
                 {
-                    Debug.Log("WHY");
                     // FLOW: Load image onto square as texture
                     byte[] texBytes = File.ReadAllBytes(texFileName);
                     nerfTex.LoadImage(texBytes);
-                    Debug.Log("WHYI");
-
-                    int sides = 1;
-                    Quad[] quads = new Quad[sides];
-                    // REVIEW: Might not need thenormalization
-                    quads[0] = new Quad(Vector3.Normalize(gameObject.transform.position - viewCamera.transform.position), gameObject.transform.position);
-                    Mesh[] sideMeshes = new Mesh[sides];
-
-                    for(int i = 0; i < sideMeshes.Length; i++)
-                    {
-                        sideMeshes[i] = quads[i].mesh;
-                    }
-                    mf.mesh = MeshUtils.MergeMeshes(sideMeshes);
 
                     processLoaded = true;
-                    Debug.Log("WHY2");
                 } 
             }
             catch(Exception e)
@@ -221,7 +278,7 @@ public class NeRFRenderer : MonoBehaviour
                 if (process.HasExited) 
                 {
                     // File.Delete(texFileName);
-                    // TODO: Delete poseMatrixPath txt file from memory
+                    // File.Delete(poseMatrixPath);
                     pollWaiting = false;
                     processLoaded = false;
                     // FLOW: Record end time
